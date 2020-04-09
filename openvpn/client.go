@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/apparentlymart/go-openvpn-mgmt/demux"
+	"github.com/dedalqq/go-openvpn-mgmt/demux"
 )
 
 var newline = []byte{'\n'}
@@ -225,6 +225,69 @@ func (c *MgmtClient) Pid() (int, error) {
 	}
 
 	return pid, nil
+}
+
+type Client struct {
+	Name      string
+	Address   string
+	BytesRX   int
+	BytesTX   int
+	ConnSince time.Time
+}
+
+func (c *MgmtClient) Clients() ([]Client, error) {
+	err := c.sendCommand([]byte("status"))
+	if err != nil {
+		return nil, err
+	}
+
+	payload, err := c.readCommandResponsePayload()
+	if err != nil {
+		return nil, err
+	}
+
+	if !bytes.HasPrefix(payload[0], []byte("OpenVPN CLIENT LIST")) {
+		return nil, fmt.Errorf("malformed response from OpenVPN")
+	}
+
+	clients := make([]Client, 0, len(payload))
+
+	for _, l := range payload[3:] {
+		if bytes.HasPrefix(l, []byte("ROUTING TABLE")) {
+			break
+		}
+
+		fields := bytes.Split(l, []byte(","))
+
+		if num := len(fields); num != 5 {
+			return nil, fmt.Errorf("malformed response from OpenVPN (wrong fields num [%d] [%s])", num, l)
+		}
+
+		rx, err := strconv.Atoi(string(fields[2]))
+		if err != nil {
+			return nil, fmt.Errorf("malformed response from OpenVPN (incorrect rx value)")
+		}
+
+		tx, err := strconv.Atoi(string(fields[3]))
+		if err != nil {
+			return nil, fmt.Errorf("malformed response from OpenVPN (incorrect tx value)")
+		}
+
+		date, err := time.Parse(time.ANSIC, string(fields[4]))
+		if err != nil {
+			return nil, fmt.Errorf("malformed response from OpenVPN (incorrect date format)")
+		}
+
+		clients = append(clients, Client{
+			Name:      string(fields[0]),
+			Address:   string(fields[1]),
+			BytesRX:   rx,
+			BytesTX:   tx,
+			ConnSince: date,
+		})
+	}
+
+	return clients, nil
 }
 
 func (c *MgmtClient) sendCommand(cmd []byte) error {
