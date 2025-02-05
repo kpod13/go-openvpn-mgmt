@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/dedalqq/go-openvpn-mgmt/demux"
+	"github.com/kpod13/go-openvpn-mgmt/demux"
 )
 
 var newline = []byte{'\n'}
@@ -77,7 +77,7 @@ func NewClient(conn io.ReadWriter, eventCh chan<- Event) *MgmtClient {
 // OpenVPN will create a suitable management port if launched with the
 // following command line option:
 //
-//    --management <ipaddr> <port>
+//	--management <ipaddr> <port>
 //
 // Address may an IPv4 address, an IPv6 address, or a hostname that resolves
 // to either of these, followed by a colon and then a port number.
@@ -86,8 +86,7 @@ func NewClient(conn io.ReadWriter, eventCh chan<- Event) *MgmtClient {
 // domain socket. To do this, pass an absolute path to the socket as
 // the target address, having run OpenVPN with the following options:
 //
-//    --management /path/to/socket unix
-//
+//	--management /path/to/socket unix
 func Dial(addr string, eventCh chan<- Event) (*MgmtClient, error) {
 	proto := "tcp"
 	if len(addr) > 0 && addr[0] == '/' {
@@ -108,7 +107,7 @@ func Dial(addr string, eventCh chan<- Event) (*MgmtClient, error) {
 // OpenVPN can be instructed to activate a management hold on startup by
 // running it with the following option:
 //
-//     --management-hold
+//	--management-hold
 //
 // Instructing OpenVPN to hold gives your client a chance to connect and
 // do any necessary configuration before a connection proceeds, thus avoiding
@@ -200,7 +199,7 @@ func (c *MgmtClient) LatestState() (*StateEvent, error) {
 	}
 
 	if len(payload) != 1 {
-		return nil, fmt.Errorf("Malformed OpenVPN 'state' response")
+		return nil, fmt.Errorf("malformed OpenVPN 'state' response")
 	}
 
 	return &StateEvent{
@@ -236,7 +235,7 @@ type Client struct {
 }
 
 func (c *MgmtClient) Clients() ([]Client, error) {
-	err := c.sendCommand([]byte("status"))
+	err := c.sendCommand([]byte("status 1"))
 	if err != nil {
 		return nil, err
 	}
@@ -273,7 +272,21 @@ func (c *MgmtClient) Clients() ([]Client, error) {
 			return nil, fmt.Errorf("malformed response from OpenVPN (incorrect tx value)")
 		}
 
-		date, err := time.Parse(time.ANSIC, string(fields[4]))
+		parseTime := func(s string) (time.Time, error) {
+			date, parseErr := time.Parse(time.DateTime, s)
+			if parseErr == nil {
+				return date, nil
+			}
+
+			date, parseErr = time.Parse(time.ANSIC, s)
+			if parseErr == nil {
+				return date, nil
+			}
+
+			return time.Time{}, parseErr
+		}
+
+		date, err := parseTime(string(fields[4]))
 		if err != nil {
 			return nil, fmt.Errorf("malformed response from OpenVPN (incorrect date format)")
 		}
